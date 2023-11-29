@@ -1,0 +1,7 @@
+version: 3
+
+
+tasks:
+  server:
+    cmds:
+      - python -m http.server 8000
