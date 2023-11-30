@@ -8,9 +8,18 @@ import { randomUUID } from 'crypto';
 const app = new Elysia()
   .use(htmlPlugin())
   .onRequest(({ request, set }) => {
-    if (!request.url.includes('/login')
-      && !request.url.includes('/signin') && !request.url.includes('/static')) {
-      console.log(request);
+    const path = new URL(request.url).pathname;
+
+    if (
+      !(
+        path === '/' ||
+        path === '/login' ||
+        path === '/logout' ||
+        path === '/signin' ||
+        path === '/static'
+      )
+    ) {
+      console.log('onRequest catched', request);
 
       // Get cookies from request
       const cookies = request.headers.get('cookie');
@@ -22,6 +31,8 @@ const app = new Elysia()
         // Respond with redirect
         return request;
       }
+    } else {
+      console.log('onRequest bypass', request);
     }
   })
   .get('/logout', ({ set, cookie: { session } }) => {
@@ -39,11 +50,11 @@ const app = new Elysia()
           <input type="password" name="password" />
           <button type="submit">Sign in</button>
         </form>
-      </WrapHx>
+      </WrapHx>, { headers: {} }
     );
   })
   .post('/signin', ({ request, body, query: { back }, set, cookie: { session } }) => {
-    set.redirect = back || '/';
+    set.redirect = decodeURI(back || '/');
     set.status = 302;
 
     // Validate user/password from body and set session cookie
