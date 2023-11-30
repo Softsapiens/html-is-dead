@@ -7,14 +7,69 @@ import { randomUUID } from 'crypto';
 
 const app = new Elysia()
   .use(htmlPlugin())
+  .onRequest(({ request, set }) => {
+    if (!request.url.includes('/login')
+      && !request.url.includes('/signin') && !request.url.includes('/static')) {
+      console.log(request);
+
+      // Get cookies from request
+      const cookies = request.headers.get('cookie');
+      const session = cookies?.split(';').find(cookie => cookie.startsWith(' session='));
+
+      if (!session) {
+        set.redirect = '/login?back=' + encodeURI(new URL(request.url).pathname);
+        set.status = 302;
+        // Respond with redirect
+        return request;
+      }
+    }
+  })
+  .get('/logout', ({ set, cookie: { session } }) => {
+    set.redirect = '/';
+    set.status = 302;
+    session.remove();
+  })
+  .get('/login', ({ html, query: { back }, headers }) => {
+
+    return html(
+      <WrapHx cond={headers['hx-request'] === 'true' || false}>
+        <div>Login</div>
+        <form action={"/signin?back=" + back} method="post">
+          <input type="text" name="username" />
+          <input type="password" name="password" />
+          <button type="submit">Sign in</button>
+        </form>
+      </WrapHx>
+    );
+  })
+  .post('/signin', ({ request, body, query: { back }, set, cookie: { session } }) => {
+    set.redirect = back || '/';
+    set.status = 302;
+
+    // Validate user/password from body and set session cookie
+    session.value = '123';
+
+    return request;
+  })
+  // }, {
+  //   cookie: t.Cookie({
+  //     value: t.String(),
+  //   })
+  // })
   .get("/", ({ html }) => html(
     <BaseHtml>
       <Body>
       </Body>
     </BaseHtml>
   ))
-  .get("/users", ({ html }) => html(User()))
-  .post("/users", ({ html, body }) => {
+  .get("/users", ({ html, headers }) =>
+    html(
+      <WrapHx cond={headers['hx-request'] === 'true' || false}>
+        <User />
+      </WrapHx>
+    )
+  )
+  .post("/users", ({ html, body, headers }) => {
     const user = createUser(
       {
         name: body.name,
@@ -94,6 +149,20 @@ function BaseHtml({ children }: elements.PropsWithChildren) {
   `)
 }
 
+function WrapHx({ cond, children }: elements.PropsWithChildren & { cond: boolean }) {
+  if (cond) {
+    return children;
+  } else {
+    return (
+      <BaseHtml>
+        <Body>
+          {children}
+        </Body>
+      </BaseHtml>
+    )
+  }
+}
+
 function Body({ children }: elements.PropsWithChildren) {
   return (
     <body class="bg-dark">
@@ -109,6 +178,9 @@ function Body({ children }: elements.PropsWithChildren) {
               <ul class="navbar-nav">
                 <li class="nav-item">
                   <a class="nav-link active" aria-current="page" href="#" hx-get="/users" hx-target="main" hx-swap="innerHTML" hx-push-url="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link active" aria-current="page" href="/logout">Logout&nbsp;<i class="bi bi-people-fill"></i></a>
                 </li>
               </ul>
             </div>
