@@ -44,13 +44,15 @@ const app = new Elysia()
 
     return html(
       <WrapHx cond={headers['hx-request'] === 'true' || false}>
+      
         <div>Login</div>
         <form action={"/signin?back=" + back} method="post">
           <input type="text" name="username" />
           <input type="password" name="password" />
           <button type="submit">Sign in</button>
         </form>
-      </WrapHx>, { headers: {} }
+      
+      </WrapHx>
     );
   })
   .post('/signin', ({ request, body, query: { back }, set, cookie: { session } }) => {
@@ -162,7 +164,10 @@ function BaseHtml({ children }: elements.PropsWithChildren) {
 
 function WrapHx({ cond, children }: elements.PropsWithChildren & { cond: boolean }) {
   if (cond) {
-    return children;
+    return (
+      <>
+      {children}
+      </>);
   } else {
     return (
       <BaseHtml>
@@ -173,7 +178,8 @@ function WrapHx({ cond, children }: elements.PropsWithChildren & { cond: boolean
     )
   }
 }
-
+                  
+// TODO: try to send the header hx-push-url to set the section url in the browser
 function Body({ children }: elements.PropsWithChildren) {
   return (
     <body class="bg-dark">
@@ -188,7 +194,7 @@ function Body({ children }: elements.PropsWithChildren) {
             <div class="collapse navbar-collapse" id="navbarNav">
               <ul class="navbar-nav">
                 <li class="nav-item">
-                  <a class="nav-link active" aria-current="page" href="#" hx-get="/users" hx-target="main" hx-swap="innerHTML" hx-push-url="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
+                  <a class="nav-link active" aria-current="page" href="/users" hx-get="/users" hx-target="main" hx-swap="innerHTML" hx-push-url="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
                 </li>
                 <li class="nav-item">
                   <a class="nav-link active" aria-current="page" href="/logout">Logout&nbsp;<i class="bi bi-people-fill"></i></a>
