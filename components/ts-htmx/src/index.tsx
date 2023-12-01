@@ -26,32 +26,37 @@ const app = new Elysia()
       const session = cookies?.split(';').find(cookie => cookie.startsWith(' session='));
 
       if (!session) {
-        set.redirect = '/login?back=' + encodeURI(new URL(request.url).pathname);
-        set.status = 302;
+        const targetPath = path.includes('/users') ? '/users' : path;
+        const loginUrl = '/login?back=' + encodeURI(targetPath);
+
         // Respond with redirect
-        return request;
+        return new Response(null, {
+          headers: {
+            'Hx-Redirect': loginUrl,
+          }
+        });
       }
     } else {
       console.log('onRequest bypass', request);
     }
   })
-  .get('/logout', ({ set, cookie: { session } }) => {
+  .get('/logout', ({ request, set, cookie: { session } }) => {
     set.redirect = '/';
     set.status = 302;
     session.remove();
+
+    return request;
   })
   .get('/login', ({ html, query: { back }, headers }) => {
 
     return html(
       <WrapHx cond={headers['hx-request'] === 'true' || false}>
-      
         <div>Login</div>
         <form action={"/signin?back=" + back} method="post">
           <input type="text" name="username" />
           <input type="password" name="password" />
           <button type="submit">Sign in</button>
         </form>
-      
       </WrapHx>
     );
   })
@@ -63,12 +68,11 @@ const app = new Elysia()
     session.value = '123';
 
     return request;
+  }, {
+    cookie: t.Cookie({
+      session: t.Optional(t.String()),
+    })
   })
-  // }, {
-  //   cookie: t.Cookie({
-  //     value: t.String(),
-  //   })
-  // })
   .get("/", ({ html }) => html(
     <BaseHtml>
       <Body>
@@ -166,7 +170,7 @@ function WrapHx({ cond, children }: elements.PropsWithChildren & { cond: boolean
   if (cond) {
     return (
       <>
-      {children}
+        {children}
       </>);
   } else {
     return (
@@ -178,7 +182,7 @@ function WrapHx({ cond, children }: elements.PropsWithChildren & { cond: boolean
     )
   }
 }
-                  
+
 // TODO: try to send the header hx-push-url to set the section url in the browser
 function Body({ children }: elements.PropsWithChildren) {
   return (
