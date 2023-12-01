@@ -1,149 +1,162 @@
+import { logger } from '@bogeychan/elysia-logger';
 import { html as htmlPlugin } from '@elysiajs/html';
 import { staticPlugin } from "@elysiajs/static";
-import { Elysia, t } from "elysia";
-import dedent from 'ts-dedent';
 import * as elements from "@kitajs/html";
 import { randomUUID } from 'crypto';
+import { Elysia, t } from "elysia";
+import dedent from 'ts-dedent';
 
 const app = new Elysia()
+  .use(logger({ level: 'debug' }))
   .use(htmlPlugin())
-  .onRequest(({ request, set }) => {
-    const path = new URL(request.url).pathname;
-
-    if (
-      !(
-        path === '/' ||
-        path === '/login' ||
-        path === '/logout' ||
-        path === '/signin' ||
-        path === '/static'
-      )
-    ) {
-      console.log('onRequest catched', request);
-
-      // Get cookies from request
-      const cookies = request.headers.get('cookie');
-      const session = cookies?.split(';').find(cookie => cookie.startsWith(' session='));
-
-      if (!session) {
-        const targetPath = path.includes('/users') ? '/users' : path;
-        const loginUrl = '/login?back=' + encodeURI(targetPath);
-
-        // Respond with redirect
-        return new Response(null, {
-          headers: {
-            'Hx-Redirect': loginUrl,
-          }
-        });
-      }
-    } else {
-      console.log('onRequest bypass', request);
+  .get("/", ({ html }) => html(<LandingPage />))
+  .get('/login', ({ html, query: { next }, cookie: { session }, headers }) => {
+    if (session?.value) {
+      return redirect({ headers, location: next ?? '/users' });
     }
+    const nextUrl = next ? `?next=${next}` : '';
+    return html(<LoginPage nextUrl={nextUrl} />);
+  }, {
+    beforeHandle({ cookie: { session }, headers }) {
+      if (session?.value) {
+        return redirect({ headers, location: '/' });
+      }
+    },
+    cookie: t.Optional(t.Cookie({
+      session: t.Optional(t.String()),
+    }))
   })
-  .get('/logout', ({ request, set, cookie: { session } }) => {
-    set.redirect = '/';
-    set.status = 302;
-    session.remove();
-
-    return request;
-  })
-  .get('/login', ({ html, query: { back }, headers }) => {
-
-    return html(
-      <WrapHx cond={headers['hx-request'] === 'true' || false}>
-        <div>Login</div>
-        <form action={"/signin?back=" + back} method="post">
-          <input type="text" name="username" />
-          <input type="password" name="password" />
-          <button type="submit">Sign in</button>
-        </form>
-      </WrapHx>
-    );
-  })
-  .post('/signin', ({ request, body, query: { back }, set, cookie: { session } }) => {
-    set.redirect = decodeURI(back || '/');
-    set.status = 302;
-
-    // Validate user/password from body and set session cookie
-    session.value = '123';
-
-    return request;
+  .post('/login', ({ query: { back: next }, headers, cookie: { session } }) => {
+    session.set({ value: 'asdf' });
+    return redirect({ headers, location: next ? decodeURI(next) : '/users' });
   }, {
     cookie: t.Cookie({
       session: t.Optional(t.String()),
     })
   })
-  .get("/", ({ html }) => html(
-    <BaseHtml>
-      <Body>
-      </Body>
-    </BaseHtml>
-  ))
-  .get("/users", ({ html, headers }) =>
-    html(
-      <WrapHx cond={headers['hx-request'] === 'true' || false}>
-        <User />
-      </WrapHx>
-    )
-  )
-  .post("/users", ({ html, body, headers }) => {
-    const user = createUser(
-      {
-        name: body.name,
-        email: body.email
-      }
-    )
-
-    return html(<UsersTableRow {...user} />)
+  .all('/logout', ({ cookie: { session }, headers, log }) => {
+    session.remove();
+    log.debug(headers, 'headers')
+    return redirect({ headers, location: '/' });
   }, {
-    type: 'formdata',
-    body: t.Object({
-      // id: t.Optional(t.String()),
-      name: t.String(),
-      email: t.String(),
+    cookie: t.Cookie({
+      session: t.Optional(t.String()),
     })
   })
-  .put("/users", ({ html, body }) => {
-    const user = updateUser(
-      {
-        id: body.id,
-        name: body.name,
-        email: body.email
+  .guard({
+    beforeHandle({ request, cookie: { session }, headers, log }) {
+      const path = new URL(request.url).pathname;
+      if (!session.value) {
+        log.info('User not authenticated')
+        const targetPath = path.includes('/users') ? '/users' : path;
+        const loginUrl = '/login?next=' + encodeURI(targetPath);
+        return redirect({ headers, location: loginUrl });
       }
-    )
-
-    console.log(user);
-
-    return html(<UsersTableRow {...user} />)
-  }, {
-    type: 'formdata',
-    body: t.Object({
-      id: t.String(),
-      name: t.String(),
-      email: t.String(),
+    },
+    cookie: t.Cookie({
+      session: t.Optional(t.String()),
     })
-  }
+  }, (app) => app
+    .get("/users", ({ html }) =>
+      html(<UserPage />)
+    )
+    .post("/users", ({ html, body, set }) => {
+      const user = createUser(
+        {
+          name: body.name,
+          email: body.email
+        }
+      )
+      set.headers['hx-trigger'] = 'htmx:closeModal';
+      return html(<UsersTableRow {...user} />)
+    }, {
+      type: 'formdata',
+      body: t.Object({
+        name: t.String(),
+        email: t.String(),
+      })
+    })
+    .put("/users", ({ html, body, set }) => {
+      const user = updateUser(
+        {
+          id: body.id,
+          name: body.name,
+          email: body.email
+        }
+      )
+      set.headers['hx-trigger'] = 'htmx:closeModal';
+      return html(<UsersTableRow {...user} />)
+    }, {
+      type: 'formdata',
+      body: t.Object({
+        id: t.String(),
+        name: t.String(),
+        email: t.String(),
+      })
+    })
+    .patch("/users/:id", ({ html, params, body }) => {
+      const user = getUser(params.id);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      const updUser = updateUser(
+        {
+          id: user.id,
+          name: body.name,
+          email: body.email
+        }
+      )
+      return html(<UsersTableRow {...updUser} />)
+    }, {
+      type: 'formdata',
+      body: t.Object({
+        id: t.String(),
+        name: t.String(),
+        email: t.String(),
+      })
+    })
+    .delete("/users/:id", ({ params }) => {
+      const user = getUser(params.id);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      deleteUser(params.id);
+    })
+    .get('/_components/users/update/:id', ({ html, params }) => {
+      const user = getUser(params.id);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      return html(<UserDialogUpdate {...user} />)
+    })
+    .get('/_components/users/new', ({ html }) => html(<UserDialogCreate />))
   )
-  .patch("/users/:id", ({ html, params }) => {
-    const user = getUser(params.id);
-  })
-  .delete("/users/:id", ({ html, params }) => {
-    const user = deleteUser(params.id);
-  })
-  .get('/users/update/:id', ({ html, params }) => {
-    const user = getUser(params.id);
-    if (!user) {
-      throw new Error('User not found');
-    }
-    return html(<UserDialogUpdate {...user} />)
-  })
-  .get('/users/new', ({ html }) => html(<UserDialogCreate />))
+
   .use(staticPlugin({ assets: "static", prefix: "/static" }))
   .listen(3000);
 
 console.log(
   `🦊 Elysia is running at ${app.server?.url}`
 );
+
+function redirect({ headers, location }: { headers: Record<string, unknown>, location: string }) {
+  if (headers['hx-request'] === 'true') {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        'hx-redirect': location,
+        'hx-refresh': 'true',
+        'hx-replace': 'true'
+      }
+    });
+  }
+  return new Response(null, {
+    status: 302,
+    headers: {
+      'Location': location,
+    }
+  });
+}
 
 function BaseHtml({ children }: elements.PropsWithChildren) {
   return (dedent`
@@ -166,54 +179,40 @@ function BaseHtml({ children }: elements.PropsWithChildren) {
   `)
 }
 
-function WrapHx({ cond, children }: elements.PropsWithChildren & { cond: boolean }) {
-  if (cond) {
-    return (
-      <>
-        {children}
-      </>);
-  } else {
-    return (
-      <BaseHtml>
-        <Body>
-          {children}
-        </Body>
-      </BaseHtml>
-    )
-  }
-}
-
 // TODO: try to send the header hx-push-url to set the section url in the browser
-function Body({ children }: elements.PropsWithChildren) {
+function Body({ children, authenticated }: elements.PropsWithChildren<{ authenticated?: boolean }>) {
   return (
-    <body class="bg-dark">
+    <body class="bg-dark text-light">
       <header>
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
           <div class="container-fluid">
             <a class="navbar-brand" href="/">HTML is 💀</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-              aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-              <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-              <ul class="navbar-nav">
-                <li class="nav-item">
-                  <a class="nav-link active" aria-current="page" href="/users" hx-get="/users" hx-target="main" hx-swap="innerHTML" hx-push-url="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link active" aria-current="page" href="/logout">Logout&nbsp;<i class="bi bi-people-fill"></i></a>
-                </li>
-              </ul>
-            </div>
+            {
+              authenticated &&
+              <>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                  aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                  <ul class="navbar-nav w-100">
+                    <li class="nav-item">
+                      <a class="nav-link active" aria-current="page" hx-get="/users" hx-target="main" hx-swap="innerHTML" hx-push-url="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
+                    </li>
+                    <li class="nav-item d-flex flex-row flex-grow-1 justify-content-lg-end">
+                      <a class="nav-link rounded-3 bg-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout" hx-replace-url="true">Logout&nbsp;<i class="bi bi-box-arrow-right"></i></a>
+                    </li>
+                  </ul>
+                </div>
+              </>
+            }
           </div>
         </nav>
       </header>
       <main>
-        <section>
-          {children}
-        </section>
+        {children}
       </main>
-      <footer class="footer text-light">
+      <footer class="footer">
         <div class="container text-center p-3">
           <div class="row">
             <div class="col">Copyright © 2023 Telefónica.</div>
@@ -224,21 +223,63 @@ function Body({ children }: elements.PropsWithChildren) {
   )
 }
 
-function User() {
+function LandingPage() {
   return (
-    <>
-      <div class="container container-fluid p-3">
-        <div class="row justify-content-end">
-          <div class="col-12 d-flex justify-content-end">
-            <CreateUserButton />
+    <BaseHtml>
+      <Body>
+        <section class="d-flex flex-column justify-content-center align-items-center w-100 h-100">
+          <h1 class="bg-dark text-light">💀 HTML is dead, long live HTMX</h1>
+          <a class="btn btn-primary btn-lg" href="/login">Login</a>
+        </section>
+      </Body>
+    </BaseHtml>
+  )
+}
+
+function LoginPage({ nextUrl = '' }) {
+  return (
+    <BaseHtml>
+      <Body>
+        <section class="d-flex flex-column justify-content-center align-items-center w-100 h-100">
+          <form hx-post={"/login" + nextUrl}>
+            <div class="mb-3">
+              <label for="exampleInputEmail1" class="form-label">Email address</label>
+              <input type="text" class="form-control" id="exampleInputEmail1" aria-describedby="emailHelp" />
+              <div id="emailHelp" class="form-text">We'll never share your email with anyone else.</div>
+            </div>
+            <div class="mb-3">
+              <label for="exampleInputPassword1" class="form-label">Password</label>
+              <input type="password" class="form-control" id="exampleInputPassword1" />
+            </div>
+            <div class="mb-3 form-check">
+              <input type="checkbox" class="form-check-input" id="exampleCheck1" />
+              <label class="form-check-label" for="exampleCheck1">Check me out</label>
+            </div>
+            <button type="submit" class="btn btn-primary">Login</button>
+          </form>
+        </section>
+      </Body>
+    </BaseHtml>
+  )
+}
+
+function UserPage() {
+  return (
+    <BaseHtml>
+      <Body authenticated>
+        <section class="container container-fluid p-3">
+          <div class="row justify-content-end">
+            <div class="col-12 d-flex justify-content-end">
+              <CreateUserButton />
+            </div>
           </div>
-        </div>
-        <div class="row gap-2">
-          <UsersTable />
-        </div>
-      </div>
-      <UserModalContainer />
-    </>
+          <div class="row gap-2">
+            <UsersTable />
+          </div>
+        </section>
+        <UserModalContainer />
+      </Body>
+    </BaseHtml>
   )
 }
 
@@ -249,7 +290,7 @@ function CreateUserButton() {
       class="btn btn-primary"
       data-bs-toggle="modal"
       data-bs-target="#user-modal"
-      hx-get="/users/new"
+      hx-get="/_components/users/new"
       hx-target="#user-modal-dialog"
       hx-swap="innerHTML"
     >
@@ -257,7 +298,6 @@ function CreateUserButton() {
     </button>
   )
 }
-
 
 function UsersTable() {
   const users = listUsers()
@@ -307,7 +347,7 @@ function UsersTableRowActions({ id }: Partial<User>) {
         class="btn btn-primary"
         data-bs-toggle="modal"
         data-bs-target="#user-modal"
-        hx-get={`/users/update/${id}`}
+        hx-get={`/_components/users/update/${id}`}
         hx-target="#user-modal-dialog"
         hx-swap="innerHTML"
       >
@@ -327,7 +367,7 @@ function UsersTableRowActions({ id }: Partial<User>) {
 function UserDialogCreate() {
   return (
     <form hx-post="/users" hx-target="#users-table-body" hx-swap="beforeend" autocomplete="off">
-      <div class="modal-content">
+      <div class="modal-content text-dark">
         <div class="modal-header">
           <h5 class="modal-title" id="user-modal-label">Create User</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -361,7 +401,7 @@ function UserDialogUpdate({ ...user }: User) {
   return (
     <form hx-put="/users" hx-target={"#users-table-row-" + user.id} hx-swap="outerHTML" autocomplete="off">
       <input type="hidden" name="id" value={user.id} />
-      <div class="modal-content">
+      <div class="modal-content text-dark">
         <div class="modal-header">
           <h5 class="modal-title" id="user-modal-label">Update User</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -394,8 +434,19 @@ function UserDialogUpdate({ ...user }: User) {
 function UserModalContainer() {
   return (
     <>
-      <div class="modal fade" id="user-modal" tabindex="-1" aria-labelledby="user-modal-label" aria-hidden="true">
+      <div class="modal fade text-reset" id="user-modal" tabindex="-1" aria-labelledby="user-modal-label" aria-hidden="true">
         <div class="modal-dialog" id="user-modal-dialog"></div>
+        <script>
+          {
+            `
+          document.body.addEventListener('htmx:closeModal', function(event) {
+            var modalElement = document.querySelector('#user-modal'); // replace with your modal id
+            var bootstrapModal = bootstrap.Modal.getInstance(modalElement);
+            bootstrapModal.hide();
+          });
+          `
+          }
+        </script>
       </div>
     </>
   )

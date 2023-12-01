@@ -7,6 +7,7 @@
     "lint": "eslint src/**/*.ts"
   },
   "dependencies": {
+    "@bogeychan/elysia-logger": "^0.0.13",
     "@elysiajs/html": "latest",
     "@elysiajs/static": "^0.6.0",
     "@kitajs/html": "^3.0.10",
