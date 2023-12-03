@@ -9,7 +9,7 @@ import dedent from 'ts-dedent';
 const app = new Elysia()
   .use(logger({ level: 'debug' }))
   .use(htmlPlugin())
-  .get("/", ({ html }) => html(<LandingPage />))
+  .get("/", ({ html, cookie: { session } }) => html(<LandingPage authenticated={session?.value != null} />))
   .get('/login', ({ html, query: { next }, cookie: { session }, headers }) => {
     if (session?.value) {
       return redirect({ headers, location: next ?? '/users' });
@@ -197,10 +197,10 @@ function Body({ children, authenticated }: elements.PropsWithChildren<{ authenti
                 <div class="collapse navbar-collapse" id="navbarNav">
                   <ul class="navbar-nav w-100">
                     <li class="nav-item">
-                      <a class="nav-link active" aria-current="page" hx-get="/users" hx-target="main" hx-swap="innerHTML" hx-push-url="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
+                      <a class="nav-link active" aria-current="page" href="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
                     </li>
                     <li class="nav-item d-flex flex-row flex-grow-1 justify-content-lg-end">
-                      <a class="nav-link rounded-3 bg-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout" hx-replace-url="true">Logout&nbsp;<i class="bi bi-box-arrow-right"></i></a>
+                      <a class="btn btn-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout" hx-replace-url="true">Logout&nbsp;<i class="bi bi-box-arrow-right"></i></a>
                     </li>
                   </ul>
                 </div>
@@ -223,13 +223,13 @@ function Body({ children, authenticated }: elements.PropsWithChildren<{ authenti
   )
 }
 
-function LandingPage() {
+function LandingPage({ authenticated }: { authenticated?: boolean }) {
   return (
     <BaseHtml>
-      <Body>
+      <Body authenticated={authenticated}>
         <section class="d-flex flex-column justify-content-center align-items-center w-100 h-100">
           <h1 class="bg-dark text-light">💀 HTML is dead, long live HTMX</h1>
-          <a class="btn btn-primary btn-lg" href="/login">Login</a>
+          {!authenticated && <a class="btn btn-primary btn-lg" href="/login">Login</a>}
         </section>
       </Body>
     </BaseHtml>
