@@ -1,56 +1,70 @@
-import { logger } from '@bogeychan/elysia-logger';
-import { html as htmlPlugin } from '@elysiajs/html';
+import { logger } from "@bogeychan/elysia-logger";
+import { html as htmlPlugin } from "@elysiajs/html";
 import { staticPlugin } from "@elysiajs/static";
 import * as elements from "@kitajs/html";
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 import { Elysia, t } from "elysia";
-import dedent from 'ts-dedent';
+import dedent from "ts-dedent";
 
 const app = new Elysia()
-  .use(logger({ level: 'debug' }))
+  .use(logger({ level: "debug" }))
   .use(htmlPlugin())
-  .get("/", ({ html, cookie: { session } }) => html(<LandingPage authenticated={session?.value != null} />))
-  .get('/login', ({ html, query: { next }, cookie: { session }, headers }) => {
-    if (session?.value) {
-      return redirect({ headers, location: next ?? '/users' });
+  .derive(function ({ set, headers, cookie: { session } }) {
+    return {
+      authenticated: session?.value != null,
+      redirect(url: string) {
+        if (headers["hx-request"] === "true") {
+          set.headers["hx-redirect"] = url;
+          set.headers["hx-refresh"] = "true";
+          set.headers["hx-replace"] = "true";
+        } else {
+          set.redirect = url;
+        }
+        return '';
+      }
     }
-    const nextUrl = next ? `?next=${next}` : '';
+  })
+  .get("/", ({ html, authenticated }) => html(<LandingPage authenticated={authenticated} />))
+  .get("/login", ({ html, query: { next }, authenticated, redirect }) => {
+    if (authenticated) {
+      return redirect("/users");
+    }
+    const nextUrl = next ? `?next=${next}` : "";
     return html(<LoginPage nextUrl={nextUrl} />);
   }, {
-    beforeHandle({ cookie: { session }, headers }) {
-      if (session?.value) {
-        return redirect({ headers, location: '/' });
+    beforeHandle({ authenticated, redirect }) {
+      if (authenticated) {
+        return redirect("/users");
       }
     },
     cookie: t.Optional(t.Cookie({
       session: t.Optional(t.String()),
     }))
   })
-  .post('/login', ({ query: { back: next }, headers, cookie: { session } }) => {
-    session.set({ value: 'asdf' });
-    return redirect({ headers, location: next ? decodeURI(next) : '/users' });
+  .post("/login", ({ query: { back: next }, cookie: { session }, redirect }) => {
+    session.set({ value: "asdf" });
+    return redirect(next ? decodeURI(next) : "/users");
   }, {
     cookie: t.Cookie({
       session: t.Optional(t.String()),
     })
   })
-  .all('/logout', ({ cookie: { session }, headers, log }) => {
+  .all("/logout", ({ cookie: { session }, redirect }) => {
     session.remove();
-    log.debug(headers, 'headers')
-    return redirect({ headers, location: '/' });
+    return redirect("/login");
   }, {
     cookie: t.Cookie({
       session: t.Optional(t.String()),
     })
   })
   .guard({
-    beforeHandle({ request, cookie: { session }, headers, log }) {
+    beforeHandle({ request, cookie: { session }, log, redirect }) {
       const path = new URL(request.url).pathname;
       if (!session.value) {
-        log.info('User not authenticated')
-        const targetPath = path.includes('/users') ? '/users' : path;
-        const loginUrl = '/login?next=' + encodeURI(targetPath);
-        return redirect({ headers, location: loginUrl });
+        log.info("User not authenticated")
+        const targetPath = path.includes("/users") ? "/users" : path;
+        const loginUrl = "/login?next=" + encodeURI(targetPath);
+        return redirect(loginUrl);
       }
     },
     cookie: t.Cookie({
@@ -67,10 +81,10 @@ const app = new Elysia()
           email: body.email
         }
       )
-      set.headers['hx-trigger'] = 'htmx:closeModal';
+      set.headers["hx-trigger"] = "htmx:closeModal";
       return html(<UsersTableRow {...user} />)
     }, {
-      type: 'formdata',
+      type: "formdata",
       body: t.Object({
         name: t.String(),
         email: t.String(),
@@ -84,10 +98,10 @@ const app = new Elysia()
           email: body.email
         }
       )
-      set.headers['hx-trigger'] = 'htmx:closeModal';
+      set.headers["hx-trigger"] = "htmx:closeModal";
       return html(<UsersTableRow {...user} />)
     }, {
-      type: 'formdata',
+      type: "formdata",
       body: t.Object({
         id: t.String(),
         name: t.String(),
@@ -97,7 +111,7 @@ const app = new Elysia()
     .patch("/users/:id", ({ html, params, body }) => {
       const user = getUser(params.id);
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
       const updUser = updateUser(
         {
@@ -108,7 +122,7 @@ const app = new Elysia()
       )
       return html(<UsersTableRow {...updUser} />)
     }, {
-      type: 'formdata',
+      type: "formdata",
       body: t.Object({
         id: t.String(),
         name: t.String(),
@@ -118,18 +132,18 @@ const app = new Elysia()
     .delete("/users/:id", ({ params }) => {
       const user = getUser(params.id);
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
       deleteUser(params.id);
     })
-    .get('/_components/users/update/:id', ({ html, params }) => {
+    .get("/_components/users/update/:id", ({ html, params }) => {
       const user = getUser(params.id);
       if (!user) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
       return html(<UserDialogUpdate {...user} />)
     })
-    .get('/_components/users/new', ({ html }) => html(<UserDialogCreate />))
+    .get("/_components/users/new", ({ html }) => html(<UserDialogCreate />))
   )
 
   .use(staticPlugin({ assets: "static", prefix: "/static" }))
@@ -138,25 +152,6 @@ const app = new Elysia()
 console.log(
   `🦊 Elysia is running at ${app.server?.url}`
 );
-
-function redirect({ headers, location }: { headers: Record<string, unknown>, location: string }) {
-  if (headers['hx-request'] === 'true') {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        'hx-redirect': location,
-        'hx-refresh': 'true',
-        'hx-replace': 'true'
-      }
-    });
-  }
-  return new Response(null, {
-    status: 302,
-    headers: {
-      'Location': location,
-    }
-  });
-}
 
 function BaseHtml({ children }: elements.PropsWithChildren) {
   return (dedent`
@@ -200,7 +195,7 @@ function Body({ children, authenticated }: elements.PropsWithChildren<{ authenti
                       <a class="nav-link active" aria-current="page" href="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
                     </li>
                     <li class="nav-item d-flex flex-row flex-grow-1 justify-content-lg-end">
-                      <a class="btn btn-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout" hx-replace-url="true">Logout&nbsp;<i class="bi bi-box-arrow-right"></i></a>
+                      <a class="btn btn-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout">Logout&nbsp;<i class="bi bi-box-arrow-right"></i></a>
                     </li>
                   </ul>
                 </div>
@@ -236,7 +231,7 @@ function LandingPage({ authenticated }: { authenticated?: boolean }) {
   )
 }
 
-function LoginPage({ nextUrl = '' }) {
+function LoginPage({ nextUrl = "" }) {
   return (
     <BaseHtml>
       <Body>
@@ -439,8 +434,8 @@ function UserModalContainer() {
         <script>
           {
             `
-          document.body.addEventListener('htmx:closeModal', function(event) {
-            var modalElement = document.querySelector('#user-modal'); // replace with your modal id
+          document.body.addEventListener("htmx:closeModal", function(event) {
+            var modalElement = document.querySelector("#user-modal"); // replace with your modal id
             var bootstrapModal = bootstrap.Modal.getInstance(modalElement);
             bootstrapModal.hide();
           });
@@ -460,14 +455,14 @@ interface User {
 
 const users = new Map<string, User>(
   [
-    { id: randomUUID(), name: 'John', email: 'john@email.com' },
-    { id: randomUUID(), name: 'Jane', email: 'jane@email.com' }
+    { id: randomUUID(), name: "John", email: "john@email.com" },
+    { id: randomUUID(), name: "Jane", email: "jane@email.com" }
   ].map(
     user => [user.id, user])
 );
 
 
-function createUser(User: Omit<User, 'id'>) {
+function createUser(User: Omit<User, "id">) {
   const id = randomUUID();
   const user = { ...User, id };
   users.set(id, user);
