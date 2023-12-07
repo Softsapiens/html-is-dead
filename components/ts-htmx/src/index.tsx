@@ -1,14 +1,47 @@
 import { logger } from "@bogeychan/elysia-logger";
 import { html as htmlPlugin } from "@elysiajs/html";
 import { staticPlugin } from "@elysiajs/static";
+import { Stream as ElysiaStream } from '@elysiajs/stream';
 import * as elements from "@kitajs/html";
 import { randomUUID } from "crypto";
 import { Elysia, t } from "elysia";
+import { Duplex } from 'node:stream';
 import dedent from "ts-dedent";
+
+const CONNECTED_USERS_CHANGED_EVENT = "connected-users:change"
+
+class UserStream extends Duplex {
+  private nUsers = 0;
+
+  public get users() {
+    return this.nUsers;
+  }
+
+  public connectUser() {
+    this.nUsers++;
+    this.emit(CONNECTED_USERS_CHANGED_EVENT);
+  }
+
+  public disconnectUser() {
+    if (this.nUsers > 0) {
+      this.nUsers--;
+    }
+    this.emit(CONNECTED_USERS_CHANGED_EVENT);
+  }
+
+  public addOnChangeListener(cb: () => void) {
+    this.on(CONNECTED_USERS_CHANGED_EVENT, cb);
+  }
+
+  public removeOnChangeListener(cb: () => void) {
+    this.off(CONNECTED_USERS_CHANGED_EVENT, cb);
+  }
+}
 
 const app = new Elysia()
   .use(logger({ level: "debug" }))
   .use(htmlPlugin())
+  .state("usersStream", new UserStream({}))
   .derive(function ({ set, headers, cookie: { session } }) {
     return {
       authenticated: session?.value != null,
@@ -25,6 +58,22 @@ const app = new Elysia()
     }
   })
   .get("/", ({ html, authenticated }) => html(<LandingPage authenticated={authenticated} />))
+  .get("/users/connected", ({ request, log, store: { usersStream } }) => {
+    return new ElysiaStream(async (stream) => {
+      log.info("User connected");
+      function sendUsers() {
+        stream.send(<div>Users connected {usersStream.users}&nbsp;<i class="bi bi-people-fill"></i></div>);
+      }
+      usersStream.addOnChangeListener(sendUsers);
+      usersStream.connectUser();
+      request.signal.addEventListener("abort", () => {
+        usersStream.removeOnChangeListener(sendUsers);
+        usersStream.disconnectUser();
+        stream.close();
+        log.info("User disconnected");
+      })
+    }, { event: CONNECTED_USERS_CHANGED_EVENT });
+  })
   .get("/login", ({ html, query: { next }, authenticated, redirect }) => {
     if (authenticated) {
       return redirect("/users");
@@ -172,10 +221,10 @@ function Body({ children, authenticated }: elements.PropsWithChildren<{ authenti
                 <div class="collapse navbar-collapse" id="navbarNav">
                   <ul class="navbar-nav w-100">
                     <li class="nav-item">
-                      <a class="nav-link active" aria-current="page" href="/users">Users&nbsp;<i class="bi bi-people-fill"></i></a>
+                      <a class="nav-link active" aria-current="page" href="/users">Users&nbsp;<span class="bi bi-people-fill"></span></a>
                     </li>
                     <li class="nav-item d-flex flex-row flex-grow-1 justify-content-lg-end">
-                      <a class="btn btn-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout">Logout&nbsp;<i class="bi bi-box-arrow-right"></i></a>
+                      <a class="btn btn-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout">Logout&nbsp;<span class="bi bi-box-arrow-right"></span></a>
                     </li>
                   </ul>
                 </div>
@@ -189,6 +238,13 @@ function Body({ children, authenticated }: elements.PropsWithChildren<{ authenti
       </main>
       <footer class="footer">
         <div class="container text-center p-3">
+          <div class="row">
+            <div class="col" hx-sse={`connect:/users/connected swap:${CONNECTED_USERS_CHANGED_EVENT}`}>
+              <div class="spinner-border text-light" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
           <div class="row">
             <div class="col">Copyright © 2023 Telefónica.</div>
           </div>
