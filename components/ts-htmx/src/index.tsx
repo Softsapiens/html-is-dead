@@ -96,7 +96,20 @@ const app = new Elysia()
   }, {
     cookie: t.Cookie({
       session: t.Optional(t.String()),
-    })
+    }),
+    type: "formdata",
+    body: t.Object({
+      email: t.String({
+        format: "email",
+      }),
+      password: t.String({
+        minLength: 3,
+      }),
+    }),
+    error({ set, html }) {
+      set.status = 400;
+      return 'Invalid credentials';
+    }
   })
   .all("/logout", ({ cookie: { session }, redirect }) => {
     session.remove();
@@ -123,9 +136,10 @@ const app = new Elysia()
     .get("/users", ({ html }) =>
       html(<UserPage />)
     )
-    .post("/users", ({ body, set }) => {
-      createUser({ name: body.name, email: body.email })
-      set.headers["hx-trigger"] = "closeModal, usersChanged";
+    .post("/users", ({ body, set, html }) => {
+      const user = createUser({ name: body.name, email: body.email })
+      set.headers["hx-trigger"] = "closeModal";
+      return html(<UsersTableRow {...user} />)
     }, {
       type: "formdata",
       body: t.Object({
@@ -137,13 +151,17 @@ const app = new Elysia()
         }),
       }),
     })
-    .put("/users", ({ body, set }) => {
-      updateUser({ id: body.id, name: body.name, email: body.email })
+    .put("/users/:userId", ({ body, params: { userId }, set, html }) => {
+      const id = userId;
+      const user = updateUser({ id, name: body.name, email: body.email })
       set.headers["hx-trigger"] = "closeModal, usersChanged";
+      return html(<UsersTableRow {...user} />)
     }, {
       type: "formdata",
+      params: t.Object({
+        userId: t.String(),
+      }),
       body: t.Object({
-        id: t.String(),
         name: t.String({
           minLength: 3,
         }),
@@ -158,7 +176,6 @@ const app = new Elysia()
         throw new Error("User not found");
       }
       deleteUser(params.id);
-      set.headers["hx-trigger"] = "usersChanged";
     })
     .get("/_components/users/table", ({ html }) => {
       return html(<UsersTable />)
@@ -168,9 +185,9 @@ const app = new Elysia()
       if (!user) {
         throw new Error("User not found");
       }
-      return html(<UserDialogUpdate {...user} />)
+      return html(<UpdateUserDialog {...user} />)
     })
-    .get("/_components/users/new", ({ html }) => html(<UserDialogCreate />))
+    .get("/_components/users/new", ({ html }) => html(<CreateUserDialog />))
   )
 
   .use(staticPlugin({ assets: "static", prefix: "/static" }))
@@ -272,20 +289,20 @@ function LoginPage({ nextUrl = "" }) {
     <BaseHtml>
       <Body>
         <section class="d-flex flex-column justify-content-center align-items-center w-100 h-100">
-          <form hx-post={"/login" + nextUrl}>
+          <form
+            hx-post={"/login" + nextUrl}
+            hx-target-error="find [data-errors]"
+          >
             <div class="mb-3">
-              <label for="exampleInputEmail1" class="form-label">Email address</label>
-              <input type="text" class="form-control" id="exampleInputEmail1" aria-describedby="emailHelp" />
-              <div id="emailHelp" class="form-text">We'll never share your email with anyone else.</div>
+              <label for="email" class="form-label">Email address</label>
+              <input type="email" name="email" class="form-control" id="email" aria-describedby="emailHelp" />
+              <div id="emailHelp" class="form-text text-light">We'll never share your email with anyone else.</div>
             </div>
             <div class="mb-3">
-              <label for="exampleInputPassword1" class="form-label">Password</label>
-              <input type="password" class="form-control" id="exampleInputPassword1" />
+              <label for="password" class="form-label">Password</label>
+              <input type="password" name="password" class="form-control" id="password" />
             </div>
-            <div class="mb-3 form-check">
-              <input type="checkbox" class="form-check-input" id="exampleCheck1" />
-              <label class="form-check-label" for="exampleCheck1">Check me out</label>
-            </div>
+            <div class="mb-3 text-danger" data-errors></div>
             <button type="submit" class="btn btn-primary">Login</button>
           </form>
         </section>
@@ -334,7 +351,7 @@ function UsersTable() {
   const users = listUsers()
   return (
     <>
-      <table id="users-table" class="table table-dark" hx-get="/_components/users/table" hx-trigger="usersChanged from:body">
+      <table id="users-table" class="table table-dark">
         <thead>
           <tr>
             <th class="col">Name&nbsp;<i class="bi bi-people-fill"></i></th>
@@ -388,7 +405,8 @@ function UsersTableRowActions({ id }: Partial<User>) {
         type="button"
         class="btn btn-danger"
         hx-delete={`/users/${id}`}
-        hx-swap="none"
+        hx-target={`#users-table-row-${id}`}
+        hx-swap="delete"
       >
         Delete&nbsp;<i class="bi bi-trash-fill"></i>
       </button>
@@ -396,11 +414,13 @@ function UsersTableRowActions({ id }: Partial<User>) {
   )
 }
 
-function UserDialogCreate() {
+function CreateUserDialog() {
   return (
     <form
       autocomplete="off"
       hx-post="/users"
+      hx-target="#users-table-body"
+      hx-swap="beforeend"
       hx-target-error="find [data-errors]"
     >
       <div class="modal-content text-dark">
@@ -436,11 +456,12 @@ function UserDialogCreate() {
   )
 }
 
-function UserDialogUpdate({ ...user }: User) {
+function UpdateUserDialog({ ...user }: User) {
   return (
     <form
       autocomplete="off"
-      hx-put="/users"
+      hx-put={`/users/${user.id}`}
+      hx-target={`#users-table-row-${user.id}`}
       hx-target-error="find [data-errors]"
     >
       <input type="hidden" name="id" value={user.id} />
