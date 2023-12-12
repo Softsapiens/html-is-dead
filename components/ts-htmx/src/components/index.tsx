@@ -21,10 +21,10 @@ export function BaseHtml({ children }: elements.PropsWithChildren) {
       <script src="https://unpkg.com/htmx.org@1.9.9"></script>
       <script defer src="https://unpkg.com/htmx.org/dist/ext/debug.js"></script>
       <script defer src="https://unpkg.com/htmx.org/dist/ext/response-targets.js"></script>
-      ${ (process.env.NODE_ENV==="development") ? <script>
-        htmx.logAll();
-      </script> : ""
-      }
+      ${(process.env.NODE_ENV === "development") ? <script>
+      htmx.logAll();
+    </script> : ""
+    }
     </head>
 
     ${children}  
@@ -49,7 +49,7 @@ export function Body({ children, authenticated }: elements.PropsWithChildren<{ a
                 <div class="collapse navbar-collapse" id="navbarNav">
                   <ul class="navbar-nav w-100">
                     <li class="nav-item">
-                      <a class="nav-link active" aria-current="page" href="/users">Users&nbsp;<span class="bi bi-people-fill"></span></a>
+                      <a class="nav-link active" aria-current="page" hx-trigger="click" hx-get="/users" hx-target="main">Users&nbsp;<span class="bi bi-people-fill"></span></a>
                     </li>
                     <li class="nav-item d-flex flex-row flex-grow-1 justify-content-lg-end">
                       <a class="btn btn-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout">Logout&nbsp;<span class="bi bi-box-arrow-right"></span></a>
@@ -126,19 +126,27 @@ export function UserPage() {
   return (
     <BaseHtml>
       <Body authenticated>
-        <section class="container container-fluid p-3">
-          <div class="row justify-content-end">
-            <div class="col-12 d-flex justify-content-end">
-              <CreateUserButton />
-            </div>
-          </div>
-          <div class="row gap-2">
-            <UsersTable />
-          </div>
-        </section>
-        <UserModalContainer />
+        <UserPartial />
       </Body>
     </BaseHtml>
+  )
+}
+
+export function UserPartial() {
+  return (
+    <>
+      <section class="container container-fluid p-3">
+        <div class="row justify-content-end">
+          <div class="col-12 d-flex justify-content-end">
+            <CreateUserButton />
+          </div>
+        </div>
+        <div class="row gap-2">
+          <UsersTable />
+        </div>
+      </section>
+      <UserModalContainer />
+    </>
   )
 }
 

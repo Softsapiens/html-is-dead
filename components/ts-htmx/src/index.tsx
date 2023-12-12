@@ -4,7 +4,7 @@ import { staticPlugin } from "@elysiajs/static";
 import { Stream as ElysiaStream } from '@elysiajs/stream';
 import * as elements from "@kitajs/html";
 import { Elysia, t } from "elysia";
-import { CreateUserDialog, LandingPage, LoginPage, UpdateUserDialog, UserPage, UsersTable, UsersTableRow } from "./components";
+import { CreateUserDialog, LandingPage, LoginPage, UpdateUserDialog, UserPage, UserPartial, UsersTable, UsersTableRow } from "./components";
 import { UserStream } from "./stream";
 import { CONNECTED_USERS_CHANGED_EVENT } from "./stream";
 import { createUser, updateUser, getUser, deleteUser } from "./users";
@@ -105,8 +105,8 @@ const app = new Elysia()
       session: t.Optional(t.String()),
     })
   }, (app) => app
-    .get("/users", ({ html }) =>
-      html(<UserPage />)
+    .get("/users", ({ html, headers }) =>
+      (headers["hx-request"]==="true") ? html(<UserPartial />) : html(<UserPage />)
     )
     .post("/users", ({ body, set, html }) => {
       const user = createUser({ name: body.name, email: body.email })
@@ -127,7 +127,7 @@ const app = new Elysia()
       const id = userId;
       const user = updateUser({ id, name: body.name, email: body.email })
       set.headers["hx-trigger"] = "closeModal, usersChanged";
-      
+
       return html(<UsersTableRow {...user} />)
     }, {
       type: "formdata",
