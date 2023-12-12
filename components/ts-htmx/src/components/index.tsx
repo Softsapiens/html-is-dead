@@ -32,7 +32,6 @@ export function BaseHtml({ children }: elements.PropsWithChildren) {
   `)
 }
 
-// TODO: try to send the header hx-push-url to set the section url in the browser
 export function Body({ children, authenticated }: elements.PropsWithChildren<{ authenticated?: boolean }>) {
   return (
     <body class="bg-dark text-light" hx-ext="debug, response-targets">
@@ -218,7 +217,6 @@ export function UsersTableRowActions({ id }: Partial<User>) {
         class="btn btn-danger"
         hx-delete={`/users/${id}`}
         hx-confirm="Are you sure to delete the user?"
-        hx-trigger="confirmed"
         hx-target={`#users-table-row-${id}`}
         hx-swap="delete"
       >
