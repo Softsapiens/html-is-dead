@@ -1,5 +1,6 @@
 import { Duplex } from 'node:stream';
-import { CONNECTED_USERS_CHANGED_EVENT } from './index.types';
+
+export const CONNECTED_USERS_CHANGED_EVENT = "connected-users:change"
 
 export class UserStream extends Duplex {
   private nUsers = 0;

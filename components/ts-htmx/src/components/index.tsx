@@ -1,8 +1,8 @@
 import * as elements from "@kitajs/html";
 import dedent from "ts-dedent";
-import { CONNECTED_USERS_CHANGED_EVENT } from "../stream/index.types";
+import { CONNECTED_USERS_CHANGED_EVENT } from "../stream";
 import { listUsers } from "../users";
-import { User } from "../users/index.types";
+import type { User } from "../users";
 
 export function BaseHtml({ children }: elements.PropsWithChildren) {
 

@@ -1,7 +1,10 @@
-import { User } from "./index.types";
 import { randomUUID } from "crypto";
 
-
+export interface User {
+    id: string;
+    name: string;
+    email: string;
+}
 
 const users = new Map<string, User>(
     [

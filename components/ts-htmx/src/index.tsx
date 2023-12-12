@@ -6,7 +6,7 @@ import * as elements from "@kitajs/html";
 import { Elysia, t } from "elysia";
 import { CreateUserDialog, LandingPage, LoginPage, UpdateUserDialog, UserPage, UsersTable, UsersTableRow } from "./components";
 import { UserStream } from "./stream";
-import { CONNECTED_USERS_CHANGED_EVENT } from "./stream/index.types";
+import { CONNECTED_USERS_CHANGED_EVENT } from "./stream";
 import { createUser, updateUser, getUser, deleteUser } from "./users";
 
 
@@ -127,6 +127,7 @@ const app = new Elysia()
       const id = userId;
       const user = updateUser({ id, name: body.name, email: body.email })
       set.headers["hx-trigger"] = "closeModal, usersChanged";
+      
       return html(<UsersTableRow {...user} />)
     }, {
       type: "formdata",
