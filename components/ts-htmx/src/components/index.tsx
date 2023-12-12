@@ -38,7 +38,7 @@ export function Body({ children, authenticated }: elements.PropsWithChildren<{ a
       <header>
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
           <div class="container-fluid">
-            <a class="navbar-brand" href="/">HTML is 💀</a>
+            <a class="navbar-brand" href="" hx-trigger="click" hx-get="/" hx-target="main">HTML is 💀</a>
             {
               authenticated &&
               <>
@@ -49,7 +49,7 @@ export function Body({ children, authenticated }: elements.PropsWithChildren<{ a
                 <div class="collapse navbar-collapse" id="navbarNav">
                   <ul class="navbar-nav w-100">
                     <li class="nav-item">
-                      <a class="nav-link active" aria-current="page" hx-trigger="click" hx-get="/users" hx-target="main">Users&nbsp;<span class="bi bi-people-fill"></span></a>
+                      <a class="nav-link active" aria-current="page" href="" hx-trigger="click" hx-get="/users" hx-target="main">Users&nbsp;<span class="bi bi-people-fill"></span></a>
                     </li>
                     <li class="nav-item d-flex flex-row flex-grow-1 justify-content-lg-end">
                       <a class="btn btn-danger text-light" aria-current="page" hx-trigger="click" hx-post="/logout">Logout&nbsp;<span class="bi bi-box-arrow-right"></span></a>
@@ -86,12 +86,20 @@ export function LandingPage({ authenticated }: { authenticated?: boolean }) {
   return (
     <BaseHtml>
       <Body authenticated={authenticated}>
-        <section class="d-flex flex-column justify-content-center align-items-center w-100 h-100">
-          <h1 class="bg-dark text-light">💀 HTML is dead, long live HTMX</h1>
-          {!authenticated && <a class="btn btn-primary btn-lg" href="/login">Login</a>}
-        </section>
+        <LandingPartial authenticated={authenticated} />
       </Body>
     </BaseHtml>
+  )
+}
+
+export function LandingPartial({ authenticated }: { authenticated?: boolean }) {
+  return (
+    <>
+      <section class="d-flex flex-column justify-content-center align-items-center w-100 h-100">
+        <h1 class="bg-dark text-light">💀 HTML is dead, long live HTMX</h1>
+        {!authenticated && <a class="btn btn-primary btn-lg" href="/login">Login</a>}
+      </section>
+    </>
   )
 }
 
@@ -99,6 +107,15 @@ export function LoginPage({ nextUrl = "" }) {
   return (
     <BaseHtml>
       <Body>
+        <LoginPartial nextUrl={nextUrl} />
+      </Body>
+    </BaseHtml>
+  )
+}
+
+export function LoginPartial({ nextUrl = "" }) {
+  return (
+    <>
         <section class="d-flex flex-column justify-content-center align-items-center w-100 h-100">
           <form
             hx-post={"/login" + nextUrl}
@@ -117,8 +134,7 @@ export function LoginPage({ nextUrl = "" }) {
             <button type="submit" class="btn btn-primary">Login</button>
           </form>
         </section>
-      </Body>
-    </BaseHtml>
+    </>
   )
 }
 
@@ -282,9 +298,9 @@ export function UpdateUserDialog({ ...user }: User) {
       autocomplete="off"
       hx-put={`/users/${user.id}`}
       hx-target={`#users-table-row-${user.id}`}
+      hx-swap="outerHTML"
       hx-target-error="find [data-errors]"
     >
-      <input type="hidden" name="id" value={user.id} />
       <div class="modal-content text-dark">
         <div class="modal-header">
           <h5 class="modal-title" id="user-modal-label">Update User</h5>

@@ -4,7 +4,7 @@ import { staticPlugin } from "@elysiajs/static";
 import { Stream as ElysiaStream } from '@elysiajs/stream';
 import * as elements from "@kitajs/html";
 import { Elysia, t } from "elysia";
-import { CreateUserDialog, LandingPage, LoginPage, UpdateUserDialog, UserPage, UserPartial, UsersTable, UsersTableRow } from "./components";
+import { CreateUserDialog, LandingPage, LandingPartial, LoginPage, LoginPartial, UpdateUserDialog, UserPage, UserPartial, UsersTable, UsersTableRow } from "./components";
 import { UserStream } from "./stream";
 import { CONNECTED_USERS_CHANGED_EVENT } from "./stream";
 import { createUser, updateUser, getUser, deleteUser } from "./users";
@@ -29,7 +29,8 @@ const app = new Elysia()
       }
     }
   })
-  .get("/", ({ html, authenticated }) => html(<LandingPage authenticated={authenticated} />))
+  .get("/", ({ html, authenticated, headers }) => 
+  (headers["hx-request"]==="true") ? html(<LandingPartial authenticated={authenticated} />) : html(<LandingPage authenticated={authenticated} />))
   .get("/users/connected", ({ request, log, store: { usersStream } }) => {
     return new ElysiaStream(async (stream) => {
       log.info("User connected");
@@ -46,12 +47,13 @@ const app = new Elysia()
       })
     }, { event: CONNECTED_USERS_CHANGED_EVENT });
   })
-  .get("/login", ({ html, query: { next }, authenticated, redirect }) => {
+  .get("/login", ({ html, query: { next }, authenticated, redirect, headers }) => {
     if (authenticated) {
       return redirect("/users");
     }
     const nextUrl = next ? `?next=${next}` : "";
-    return html(<LoginPage nextUrl={nextUrl} />);
+    
+    return (headers["hx-request"]==="true") ? html(<LoginPartial nextUrl={nextUrl} />) : html(<LoginPage nextUrl={nextUrl} />);
   }, {
     beforeHandle({ authenticated, redirect }) {
       if (authenticated) {
